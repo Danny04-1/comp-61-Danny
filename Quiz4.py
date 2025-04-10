@@ -21,11 +21,3 @@ print(f"Ben has: {Ben.money} dollars.")
 
 print("Shawn and Ben have the same amount of money.")
 
-
-
-
-
-
-
-
-        

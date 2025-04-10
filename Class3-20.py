@@ -16,8 +16,10 @@ def count_up(count):
     else:
         print(count)
         count_up(count+1)
-        
+
 
 count_down(counter)
 
 count_up(counter)
+if counter>=30:
+    
