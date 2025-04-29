@@ -23,6 +23,13 @@ WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 
 # Load images
+try:
+    dog_img = pygame.image.load("dog_spritesheet.png").convert_alpha()  # Make sure your sprite sheet is correct
+    dog_img = pygame.transform.scale(dog_img, (80, 80))  # Scale to desired size
+except Exception as e:
+    print("Error loading dog image:", e)
+    sys.exit()
+
 background_img = pygame.image.load("background2.png").convert()
 title_img = pygame.image.load("Title.png")
 title_img = pygame.transform.scale(title_img, (WIDTH, HEIGHT))
@@ -31,21 +38,11 @@ pygame.draw.polygon(cone_img, (255, 165, 0), [(0, 100), (25, 0), (50, 100)])
 bird_img = pygame.image.load("bird.png").convert_alpha()
 bird_img = pygame.transform.scale(bird_img, (60, 40))
 
-# Load sprite sheet and slice into frames
-sprite_sheet = pygame.image.load("dog_spritesheet.png").convert_alpha()
-frame_width, frame_height = sprite_sheet.get_width() // 3, sprite_sheet.get_height() // 2
-
-dog_frames = []
-for row in range(2):
-    for col in range(3):
-        frame = sprite_sheet.subsurface(pygame.Rect(col * frame_width, row * frame_height, frame_width, frame_height))
-        dog_frames.append(pygame.transform.scale(frame, (80, 80)))
-
 # Load sounds
 jump_sound = pygame.mixer.Sound("jump.wav")
 point_sound = pygame.mixer.Sound("point.mp3")
 lose_sound = pygame.mixer.Sound("game_over.mp3")
-bg_music = "city_background.mp3"
+bg_music = "dog_runner_background.mp3"
 pygame.mixer.music.load(bg_music)
 pygame.mixer.music.play(-1)
 
@@ -53,46 +50,66 @@ pygame.mixer.music.play(-1)
 class Dog(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
-        self.frames = dog_frames
+
+        sprite_sheet = pygame.image.load("dog_spritesheet.png").convert_alpha()
+        self.running_images = [sprite_sheet.subsurface(pygame.Rect(i * 64, 0, 64, 64)) for i in range(3)]
+        self.jumping_image = sprite_sheet.subsurface(pygame.Rect(0, 64, 64, 64))
+        self.crouching_image = sprite_sheet.subsurface(pygame.Rect(64, 64, 64, 64))
+
+        self.image = self.running_images[0]
+        self.rect = self.image.get_rect()
+        self.rect.x = 100
+        self.rect.bottom = HEIGHT - 50  # Ensure dog is sitting on the ground
+
+        self.jump_speed = 15
+        self.gravity = 1
+        self.velocity = 0
+        self.is_jumping = False
+        self.is_crouching = False
         self.frame_index = 0
-        self.image = self.frames[self.frame_index]
-        self.rect = self.image.get_rect(center=(100, HEIGHT - 100))
-        self.vel = 0
-        self.gravity = 0.8
-        self.on_ground = True
-        self.crouching = False
         self.animation_timer = 0
+        self.animation_speed = 0.15
 
     def update(self):
-        # Handle gravity
-        self.vel += self.gravity
-        self.rect.y += self.vel
-        if self.rect.bottom >= HEIGHT:
-            self.rect.bottom = HEIGHT
-            self.vel = 0
-            self.on_ground = True
+        self.handle_animation()
 
-        # Handle animation
-        self.animation_timer += 1
-        if self.animation_timer >= 10:
-            self.frame_index = (self.frame_index + 1) % 3  # 3 frames per animation type
-            self.animation_timer = 0
-
-        if self.crouching:
-            self.image = self.frames[3 + self.frame_index]  # crouch row
-        elif not self.on_ground:
-            self.image = self.frames[2]  # just one jumping frame for now
+        if self.is_jumping:
+            self.velocity += self.gravity
+            self.rect.y += self.velocity
+            if self.rect.bottom >= HEIGHT - 50:  # Ensures dog doesn't fall below the ground
+                self.rect.bottom = HEIGHT - 50
+                self.is_jumping = False
+                self.velocity = 0
+        elif self.is_crouching:
+            self.image = self.crouching_image
         else:
-            self.image = self.frames[self.frame_index]  # running
+            # Animate running
+            self.animation_timer += self.animation_speed
+            if self.animation_timer >= 1:
+                self.animation_timer = 0
+                self.frame_index = (self.frame_index + 1) % len(self.running_images)
+            self.image = self.running_images[self.frame_index]
 
     def jump(self):
-        if self.on_ground:
-            self.vel = -17
-            self.on_ground = False
-            jump_sound.play()
+        if not self.is_jumping:
+            self.is_jumping = True
+            self.velocity = -self.jump_speed
+            self.image = self.jumping_image
 
     def crouch(self, is_crouching):
-        self.crouching = is_crouching
+        if is_crouching:
+            self.is_crouching = True
+        else:
+            self.is_crouching = False
+
+    def handle_animation(self):
+        if self.is_jumping:
+            self.image = self.jumping_image
+        elif self.is_crouching:
+            self.image = self.crouching_image
+        else:
+            self.image = self.running_images[self.frame_index]
+
 
 # Obstacle classes
 class Cone(pygame.sprite.Sprite):
@@ -228,12 +245,15 @@ def start_game():
             spawn_timer = 0
             difficulty = max(40, difficulty - 1)
 
+        # Update
         all_sprites.update()
 
+        # Collision
         if pygame.sprite.spritecollideany(dog, obstacles):
             lose_sound.play()
             game_active = False
 
+        # Draw
         all_sprites.draw(screen)
         score += 1
         txt = font.render(f"Score: {score // 10}", True, BLACK)
@@ -242,8 +262,10 @@ def start_game():
         pygame.display.update()
         clock.tick(FPS)
 
+    # Update high score
     high_score = max(high_score, score // 10)
 
+    # Game over screen
     game_over_txt = font.render("Game Over!", True, BLACK)
     restart_txt = small_font.render("Press R to Restart or ESC for Menu", True, BLACK)
     while True:
@@ -264,7 +286,11 @@ def start_game():
                 elif event.key == pygame.K_ESCAPE:
                     return
 
+
 # Run the game
 splash_screen()
 main_menu()
+
+
+
 
